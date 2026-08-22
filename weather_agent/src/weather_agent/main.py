@@ -1,7 +1,8 @@
 import os
 import json
+from typing import cast
 from openai import OpenAI
-from openai.types.chat import ChatCompletionMessage, ChatCompletionToolParam
+from openai.types.chat import ChatCompletionAssistantMessageParam, ChatCompletionMessage, ChatCompletionMessageFunctionToolCall, ChatCompletionMessageParam, ChatCompletionToolParam
 from dotenv import load_dotenv
 from dataclasses import dataclass
 
@@ -98,36 +99,61 @@ TOOLS = {
     "lookup_weather": lookup_weather
 }
 
-def ask_llm_with_tool(prompt: str, *, max_tokens: int = 400) -> ChatCompletionMessage:
+def ask_llm_with_tool(prompt: str, *, max_tokens: int = 400) -> str:
     """Call the LLM with a tool call"""
 
     provider = select_provider()
     client = build_client(provider)
-    result = client.chat.completions.create(
-        model=provider.model,
-        max_tokens=max_tokens,
-        messages=[{
+    messages: list[ChatCompletionMessageParam] = [
+        {
             "role": "user",
             "content": prompt
-        }],
-        tools=[weather_schema],
-    )
-    return result.choices[0].message
+        }
+    ]
 
-msg = ask_llm_with_tool("What is the weather in London?")
+    while True:
+        response = client.chat.completions.create(
+            model=provider.model,
+            max_tokens=max_tokens,
+            messages=messages,
+            tools=[weather_schema]
+        )
 
-print("final response from llm: ", msg.content)
+        msg = response.choices[0].message
 
-if msg.tool_calls:
-    for tool_call in msg.tool_calls:
-        if tool_call.type != "function":
-            continue
+        if not msg.tool_calls:
+            return msg.content or ""
 
-        city = json.loads(tool_call.function.arguments)["location"]
+        messages.append(cast(ChatCompletionAssistantMessageParam, {
+            "role": "assistant",
+            "content": msg.content,
+            "tool_calls": msg.tool_calls
+        }))
 
-        tool = TOOLS[tool_call.function.name]
+        # LLM is asking us to call a tool
+        for tool_call in msg.tool_calls:
+            if not isinstance(tool_call, ChatCompletionMessageFunctionToolCall):
+                raise ValueError("Unsupported custom tool call")
 
-        result = tool(city)
-        print(result)
-else:
-    print("No tool call detected")    
+            tool_name = tool_call.function.name
+            tool_args = json.loads(tool_call.function.arguments) # {"location": "london"}
+            tool_call_id = tool_call.id
+
+            if tool_name not in TOOLS:
+                raise ValueError(f"Tool {tool_name} not found!")
+
+            tool = TOOLS[tool_name] # actual function
+            result = tool(**tool_args) # -> lookup_weather(location="London")
+
+            messages.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": tool_call_id,
+                    "content": result
+                }
+            )
+
+msg = ask_llm_with_tool("Compare the weathers of London and Mumbai")
+
+print("final response from llm: ", msg)
+   
