@@ -3,7 +3,7 @@ from openai import OpenAI
 from dotenv import load_dotenv
 from dataclasses import dataclass
 
-load_dotenv
+load_dotenv()
 
 @dataclass(frozen=True)
 class Provider:
