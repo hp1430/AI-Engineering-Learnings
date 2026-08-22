@@ -1,5 +1,7 @@
 import os
+import json
 from openai import OpenAI
+from openai.types.chat import ChatCompletionMessage, ChatCompletionToolParam
 from dotenv import load_dotenv
 from dataclasses import dataclass
 
@@ -74,7 +76,7 @@ def lookup_weather(location: str) -> str:
 
     return f"The weather of {location} is {record['celsius']}C and {record['sky']}."
 
-weather_schema = {
+weather_schema: ChatCompletionToolParam = {
     "type": "function",
     "function": {
         "name": "lookup_weather",
@@ -95,3 +97,37 @@ weather_schema = {
 TOOLS = {
     "lookup_weather": lookup_weather
 }
+
+def ask_llm_with_tool(prompt: str, *, max_tokens: int = 400) -> ChatCompletionMessage:
+    """Call the LLM with a tool call"""
+
+    provider = select_provider()
+    client = build_client(provider)
+    result = client.chat.completions.create(
+        model=provider.model,
+        max_tokens=max_tokens,
+        messages=[{
+            "role": "user",
+            "content": prompt
+        }],
+        tools=[weather_schema],
+    )
+    return result.choices[0].message
+
+msg = ask_llm_with_tool("What is the weather in London?")
+
+print("final response from llm: ", msg.content)
+
+if msg.tool_calls:
+    for tool_call in msg.tool_calls:
+        if tool_call.type != "function":
+            continue
+
+        city = json.loads(tool_call.function.arguments)["location"]
+
+        tool = TOOLS[tool_call.function.name]
+
+        result = tool(city)
+        print(result)
+else:
+    print("No tool call detected")    
