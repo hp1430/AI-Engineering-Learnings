@@ -11,17 +11,17 @@ MODEL = os.getenv("MODEL")
 if not MODEL:
     raise ValueError("MODEL environment variable is not set")
 
+model = MODEL
+
 client = OpenAI(
     api_key=GROQ_API_KEY,
     base_url=BASE_URL
 )
 
-response = client.chat.completions.create(
-    model=MODEL,
-    messages=[
-        {
-            "role": "user",
-            "content": "What is Apple's stock ticker and current price?"
-        }
-    ]
-)
+def llm_reply(messages, TOOL_DEFINITION):
+    response = client.chat.completions.create(
+        model=model,
+        messages=messages,
+        tools=TOOL_DEFINITION
+    )
+    return response
