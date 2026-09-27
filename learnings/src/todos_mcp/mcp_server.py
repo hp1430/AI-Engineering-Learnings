@@ -141,3 +141,6 @@ def update_todo(
         todos[todo.id] = todo
         _save(todos)
     return todo
+
+if __name__ == "__main__":
+    mcp.run(transport="http", host="127.0.0.1", port=8000)
