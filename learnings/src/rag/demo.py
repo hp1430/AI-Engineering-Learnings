@@ -5,7 +5,7 @@ from langchain.chat_models import init_chat_model
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_core.vectorstores import InMemoryVectorStore
 
-load_dotenv()
+load_dotenv(override=True)
 
 os.environ.setdefault("LLM_MODEL", "openai/gpt-oss-20b")
 
