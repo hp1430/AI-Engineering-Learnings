@@ -1,0 +1,593 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Support Router Walkthrough</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: controls and stepper on top; code on the left, flow + step + state on the right; stacks on phones */
+:root{
+  --bg:#F1F4F7; --panel:#FFFFFF; --panel2:#E8EDF2; --line:#D2D9E0;
+  --fg:#14202B; --muted:#566675;
+  --accent:#C93F08; --accent-soft:#FCE5DA; --on-accent:#FFFFFF;
+  --code-bg:#F7F9FB; --hl:#FFEDBF;
+  --k:#7A3DA6; --s:#17694A; --c:#6F7C89; --n:#A64B05;
+  --font-ui:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --font-mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0E151C; --panel:#151F28; --panel2:#1C2832; --line:#2B3A47;
+    --fg:#E4EAEF; --muted:#93A3B1;
+    --accent:#FF8F5C; --accent-soft:#3A2316; --on-accent:#1A0E07;
+    --code-bg:#111A22; --hl:#3A3014;
+    --k:#C79BFF; --s:#7FD1A3; --c:#7C8B98; --n:#F0B66A;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0E151C; --panel:#151F28; --panel2:#1C2832; --line:#2B3A47;
+  --fg:#E4EAEF; --muted:#93A3B1;
+  --accent:#FF8F5C; --accent-soft:#3A2316; --on-accent:#1A0E07;
+  --code-bg:#111A22; --hl:#3A3014;
+  --k:#C79BFF; --s:#7FD1A3; --c:#7C8B98; --n:#F0B66A;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--bg); color:var(--fg);
+  font:15px/1.5 var(--font-ui);
+  padding-block:24px 40px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));
+  padding-right:max(16px,env(safe-area-inset-right,0px));
+}
+.wrap{max-width:1240px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
+h1{font-size:26px;line-height:1.2;margin:0 0 4px;font-weight:600;letter-spacing:-.01em;text-wrap:balance}
+.lede{margin:0;color:var(--muted);max-width:70ch}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px;min-width:0}
+.eyebrow{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600;margin:0 0 10px}
+code{font-family:var(--font-mono);font-size:.88em;background:var(--panel2);padding:1px 5px;border-radius:4px}
+
+.controls{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:24px}
+@media (max-width:860px){.controls{grid-template-columns:minmax(0,1fr)}}
+.controls > div{min-width:0}
+label.lbl{display:block;font-size:13px;font-weight:500;margin-bottom:6px}
+input[type=text]{width:100%;font:inherit;padding:9px 11px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg)}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.chip{font:inherit;font-size:13px;padding:6px 11px;border-radius:999px;border:1px solid var(--line);background:var(--panel2);color:var(--fg);cursor:pointer}
+.chip:hover{border-color:var(--accent)}
+.slrow{display:grid;grid-template-columns:78px minmax(0,1fr) 44px;align-items:center;gap:10px;margin-bottom:6px;font-family:var(--font-mono);font-size:13px}
+.slrow .pc{text-align:right;font-variant-numeric:tabular-nums}
+input[type=range]{width:100%;accent-color:var(--accent);margin:0}
+.check{display:flex;gap:8px;align-items:center;margin-top:10px;font-size:14px}
+.note{margin:10px 0 0;font-size:12.5px;color:var(--muted)}
+
+.stepper{display:flex;flex-wrap:wrap;align-items:center;gap:12px}
+.btn{font:inherit;font-size:14px;padding:8px 14px;border-radius:6px;border:1px solid var(--line);background:var(--panel2);color:var(--fg);cursor:pointer}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent);font-weight:500}
+.btn:disabled{opacity:.45;cursor:default}
+.steplabel{font-family:var(--font-mono);font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+.dots{display:flex;gap:7px;flex-wrap:wrap;margin-left:auto}
+.dot{width:13px;height:13px;border-radius:50%;border:1.5px solid var(--muted);background:transparent;padding:0;cursor:pointer}
+.dot.done{background:var(--muted)}
+.dot.cur{background:var(--accent);border-color:var(--accent)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+.grid{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);gap:16px;align-items:start}
+@media (max-width:980px){.grid{grid-template-columns:minmax(0,1fr)} .side{order:-1}}
+.side{display:flex;flex-direction:column;gap:16px;min-width:0}
+
+.codecol{padding:0;overflow:hidden}
+.codehead{display:flex;justify-content:space-between;gap:12px;padding:10px 14px;border-bottom:1px solid var(--line);font-family:var(--font-mono);font-size:12px;color:var(--muted)}
+.pane{position:relative;max-height:680px;overflow:auto;background:var(--code-bg);padding:8px 0}
+@media (max-width:980px){.pane{max-height:420px}}
+.inner{width:max-content;min-width:100%}
+.ln{display:flex;font:12.5px/1.65 var(--font-mono);border-left:3px solid transparent}
+.ln .no{flex:0 0 44px;text-align:right;padding-right:12px;color:var(--c);user-select:none}
+.ln .tx{white-space:pre;padding-right:16px}
+.ln.on{background:var(--hl);border-left-color:var(--accent)}
+.k{color:var(--k)} .s{color:var(--s)} .c{color:var(--c)} .n{color:var(--n)}
+
+.card h2{font-size:17px;margin:0 0 6px;font-weight:600}
+.card p{margin:0;max-width:64ch}
+
+svg.flow{width:100%;height:auto;display:block}
+.flow text{font-family:var(--font-mono);fill:var(--fg)}
+.flow .sub{font-size:10.5px;fill:var(--muted)}
+.flow .main{font-size:13px;font-weight:500}
+.flow .cap{font-size:11px;fill:var(--muted)}
+.node rect{fill:var(--panel);stroke:var(--line);stroke-width:1.5}
+.node.done rect{stroke:var(--muted)}
+.node.active rect{stroke:var(--accent);stroke-width:2.5;fill:var(--accent-soft)}
+.edge{fill:none;stroke:var(--line);stroke-width:1.8;marker-end:url(#ah)}
+.edge.cond{stroke-dasharray:5 4}
+.edge.done{stroke:var(--muted);stroke-width:2;marker-end:url(#ahd)}
+.edge.on{stroke:var(--accent);stroke-width:3;marker-end:url(#aho)}
+.ah{fill:var(--line)} .ahd{fill:var(--muted)} .aho{fill:var(--accent)}
+
+.row{display:grid;grid-template-columns:104px minmax(0,1fr);gap:10px;padding:6px 8px;border-radius:6px;font-family:var(--font-mono);font-size:12.5px}
+.row .kk{color:var(--muted)}
+.row .vv{overflow-wrap:anywhere}
+.row .unset{color:var(--muted)}
+.row.changed{background:var(--accent-soft)}
+.bar{display:grid;grid-template-columns:78px minmax(0,1fr) 44px;gap:10px;align-items:center;font-family:var(--font-mono);font-size:12.5px;margin:7px 0}
+.bar .pc{text-align:right;font-variant-numeric:tabular-nums}
+.track{position:relative;height:10px;background:var(--panel2);border-radius:5px}
+.fill{height:100%;border-radius:5px;background:var(--muted);transition:width .25s}
+.fill.top{background:var(--accent)}
+.thr{position:absolute;left:75%;top:-4px;bottom:-4px;border-left:1.5px dashed var(--fg);opacity:.55}
+.dim{opacity:.45}
+@media (prefers-reduced-motion:reduce){.fill{transition:none}}
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Support Router Walkthrough</h1>
+    <p class="lede">Step through the LangGraph support router one operation at a time. The model call is simulated, so you decide what it returns and watch the state, the graph and the code respond.</p>
+  </header>
+
+  <section class="panel controls" aria-label="Inputs">
+    <div>
+      <p class="eyebrow">Customer query</p>
+      <label class="lbl" for="q">What the customer typed</label>
+      <input id="q" type="text" autocomplete="off" value="I need help with my billing">
+      <p class="eyebrow" style="margin-top:16px">Try a scenario</p>
+      <div class="chips" id="chips"></div>
+    </div>
+    <div>
+      <p class="eyebrow">Simulated model output</p>
+      <div id="sliders"></div>
+      <label class="check" for="nc"><input id="nc" type="checkbox"> Model returns something that is not a choice</label>
+      <p class="note">Sliders are relative weights and are normalized to probabilities. Confidence is read as the probability of the chosen option. Editing the query re-estimates the sliders from keywords; you can then adjust them by hand.</p>
+    </div>
+  </section>
+
+  <section class="panel stepper" aria-label="Playback">
+    <button class="btn" id="back" type="button">Back</button>
+    <button class="btn primary" id="next" type="button">Next step</button>
+    <button class="btn" id="play" type="button">Play</button>
+    <button class="btn" id="reset" type="button">Restart</button>
+    <span class="steplabel" id="stepLabel" aria-live="polite"></span>
+    <div class="dots" id="dots"></div>
+  </section>
+
+  <div class="grid">
+    <section class="panel codecol" aria-label="Code">
+      <div class="codehead"><span>router_graph.py</span><span>highlighted lines run in the current step</span></div>
+      <div class="pane" id="pane"><div class="inner" id="code"></div></div>
+    </section>
+
+    <div class="side">
+      <section class="panel card" aria-live="polite">
+        <p class="eyebrow" id="cardEyebrow">Step</p>
+        <h2 id="cardTitle"></h2>
+        <p id="cardText"></p>
+      </section>
+
+      <section class="panel" aria-label="Graph">
+        <p class="eyebrow">Graph</p>
+        <svg class="flow" id="flow" viewBox="0 0 680 345" role="img" aria-label="Graph with START, router, four worker nodes and END"></svg>
+      </section>
+
+      <section class="panel" aria-label="Model output">
+        <p class="eyebrow">Model's probabilities</p>
+        <div id="bars"></div>
+        <p class="note">Dashed line marks the 0.75 confidence threshold.</p>
+      </section>
+
+      <section class="panel" aria-label="Graph state">
+        <p class="eyebrow">Graph state (saved between nodes)</p>
+        <div id="state"></div>
+        <p class="eyebrow" style="margin-top:16px">Local variables in router_node</p>
+        <div id="locals"></div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<script>
+const CODE = `from typing import TypedDict, Literal
+from openai import OpenAI
+from langgraph.graph import StateGraph, START, END
+from dotenv import load_dotenv
+load_dotenv()
+client = OpenAI()
+class AgentState(TypedDict):
+    query: str
+    route: str
+    confidence: float
+    response: str
+    probabilities: dict[str, float]
+def billing_node(state: AgentState):
+    return {
+        "response": "Billing agent is handling the query"
+    }
+def technical_node(state: AgentState):
+    return {
+        "response": "Technical agent is handling the query",
+    }
+def shipping_node(state: AgentState):
+    return {
+        "response": "Shipping agent is handling the query",
+    }
+def human_node(state: AgentState):
+    return {
+        "response": "Human agent is handling the query",
+    }
+def router_node(state: AgentState):
+    decision = client.decisions.create(
+        model="gpt-6-luna",
+        input=state["query"],  # query is the users' query
+        questions=[
+            {
+                "type": "choice",
+                "name": "support_route",
+                "instructions": (
+                    "Which support team should handle this customer request?"
+                    "Choose the most appropriate option from the following choices:"
+                ),
+                "choices": [
+                    {
+                        "value": "billing",
+                        "description": "For payments, refunds, invoices, billing and account issues"
+                    },
+                    {
+                        "value": "technical",
+                        "description": "For bugs, product issues, feature requests, auhentication and login issues, technical support or platform issues"
+                    },
+                    {
+                        "value": "shipping",
+                        "description": "For shipping, tracking, delivery, returns, logistics or order issues"
+                    },
+                    {
+                        "value": "other",
+                        "description": "For complex issues that require human intervention or escalation or if anything is unclear"
+                    }
+                ]
+            }
+        ]
+    )
+
+    answer = decision.answers[0]
+    if answer.type != "choice":
+        return {
+            "route": "human",
+            "confidence": 0.0,
+            "probabilities": {}
+        }
+
+    probabilities = {
+        item.value: item.probability
+        for item in answer.probabilities
+    }
+
+    route = answer.choice
+    if answer.confidence < 0.75 or route == "other":
+        route = "human"
+
+    return {
+        "route": route,
+        "confidence": answer.confidence,
+        "probabilities": probabilities
+    }
+def choose_next_node(state: AgentState):
+    return state["route"]
+builder = StateGraph(AgentState)
+
+builder.add_node("router", router_node)
+builder.add_node("billing", billing_node)
+builder.add_node("technical", technical_node)
+builder.add_node("shipping", shipping_node)
+builder.add_node("human", human_node)
+
+builder.add_edge(START, "router")
+builder.add_conditional_edges(
+    "router",
+    choose_next_node,
+    {
+        "billing": "billing",
+        "technical": "technical",
+        "shipping": "shipping",
+        "human": "human",
+    }
+)
+
+for node in ["billing", "technical", "shipping", "human"]:
+    builder.add_edge(node, END)
+
+graph = builder.compile()
+initial_state = {
+    "query": "I need help with my billing"
+}
+graph.invoke(initial_state)`.split('\n');
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const find = (sub, from=0) => { for (let i=from;i<CODE.length;i++) if (CODE[i].includes(sub)) return i; return -1; };
+const findEq = (t, from=0) => { for (let i=from;i<CODE.length;i++) if (CODE[i]===t) return i; return -1; };
+
+/* line map: which lines belong to which part of the flow */
+const L = {};
+L.init = find('initial_state = {'); L.invoke = find('graph.invoke(initial_state)'); L.startEdge = find('builder.add_edge(START, "router")');
+L.call = find('decision = client.decisions.create('); L.callEnd = findEq('    )', L.call);
+L.ans = find('answer = decision.answers[0]'); L.typeIf = find('if answer.type != "choice":'); L.earlyEnd = findEq('        }', L.typeIf);
+L.probs = find('probabilities = {'); L.routeLine = find('route = answer.choice');
+L.guard = find('if answer.confidence < 0.75');
+L.ret = findEq('    return {', L.routeLine); L.retEnd = findEq('    }', L.ret);
+L.choose = find('def choose_next_node'); L.chooseRet = find('return state["route"]');
+L.cond = find('builder.add_conditional_edges('); L.condEnd = findEq(')', L.cond);
+L.loop = find('for node in [');
+const nodeDef = n => find('def ' + n + '_node');
+
+/* render code with light syntax colouring */
+const TOK = /("(?:[^"\\]|\\.)*")|(#.*$)|\b(def|return|if|or|for|in|from|import|class|not)\b|\b(\d+\.?\d*)\b/g;
+function colour(line){
+  return esc(line).replace(TOK, (m, str, com, kw, num) =>
+    str ? `<span class="s">${str}</span>` :
+    com ? `<span class="c">${com}</span>` :
+    kw  ? `<span class="k">${kw}</span>` :
+          `<span class="n">${num}</span>`);
+}
+const codeEl = $('code');
+codeEl.innerHTML = CODE.map((l,i) => `<div class="ln"><span class="no">${i+1}</span><span class="tx">${colour(l) || ' '}</span></div>`).join('');
+const lineEls = [...codeEl.children];
+
+/* graph */
+const NODES = {
+  START:{x:16,y:170,w:84,h:40,t:'START',term:true},
+  router:{x:160,y:160,w:110,h:60,t:'router',s:'router_node'},
+  billing:{x:380,y:24,w:120,h:44,t:'billing',s:'billing_node'},
+  technical:{x:380,y:112,w:120,h:44,t:'technical',s:'technical_node'},
+  shipping:{x:380,y:200,w:120,h:44,t:'shipping',s:'shipping_node'},
+  human:{x:380,y:288,w:120,h:44,t:'human',s:'human_node'},
+  END:{x:580,y:170,w:84,h:40,t:'END',term:true}
+};
+const WORKERS = ['billing','technical','shipping','human'];
+const EDGES = {'start-router':'M100,190 L160,190'};
+WORKERS.forEach(n => {
+  const my = NODES[n].y + 22;
+  EDGES['router-'+n] = `M270,190 C325,190 325,${my} 380,${my}`;
+  EDGES[n+'-END'] = `M500,${my} C540,${my} 540,190 580,190`;
+});
+function drawGraph(){
+  let h = `<defs>
+    <marker id="ah" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path class="ah" d="M0,0 L8,4 L0,8 z"/></marker>
+    <marker id="ahd" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path class="ahd" d="M0,0 L8,4 L0,8 z"/></marker>
+    <marker id="aho" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path class="aho" d="M0,0 L8,4 L0,8 z"/></marker>
+  </defs>`;
+  Object.entries(EDGES).forEach(([id,d]) => { h += `<path class="edge${id.startsWith('router-')?' cond':''}" data-e="${id}" d="${d}"/>`; });
+  Object.entries(NODES).forEach(([id,n]) => {
+    const cy = n.y + n.h/2;
+    h += `<g class="node" data-n="${id}"><rect x="${n.x}" y="${n.y}" width="${n.w}" height="${n.h}" rx="${n.term?20:8}"/>`;
+    if (n.s) h += `<text class="main" x="${n.x+n.w/2}" y="${cy-2}" text-anchor="middle">${n.t}</text><text class="sub" x="${n.x+n.w/2}" y="${cy+13}" text-anchor="middle">${n.s}</text>`;
+    else h += `<text class="main" x="${n.x+n.w/2}" y="${cy+4}" text-anchor="middle">${n.t}</text>`;
+    h += `</g>`;
+  });
+  h += `<text class="cap" x="16" y="268">"other" has no node, so the guardrail</text><text class="cap" x="16" y="283">rewrites it to "human" before routing.</text>`;
+  $('flow').innerHTML = h;
+}
+drawGraph();
+
+/* inputs */
+const KEYS = ['billing','technical','shipping','other'];
+$('sliders').innerHTML = KEYS.map(k => `<div class="slrow"><label for="sl-${k}">${k}</label><input id="sl-${k}" type="range" min="0" max="100" step="1" value="25"><span class="pc" id="pc-${k}"></span></div>`).join('');
+
+const KW = {
+  billing:['bill','payment','refund','invoice','charge','card','subscription','price'],
+  technical:['bug','error','crash','log in','login','password','auth','app','feature','broken','not working','slow','api','platform'],
+  shipping:['ship','package','parcel','track','deliver','delay','order','return','courier','address']
+};
+function probs(){
+  const v = KEYS.map(k => +$('sl-'+k).value);
+  const sum = v.reduce((a,b)=>a+b,0);
+  const o = {};
+  KEYS.forEach((k,i) => o[k] = sum ? v[i]/sum : 0.25);
+  return o;
+}
+function showPct(){
+  const p = probs();
+  KEYS.forEach(k => $('pc-'+k).textContent = Math.round(p[k]*100) + '%');
+}
+function autoFromQuery(){
+  const q = $('q').value.toLowerCase();
+  const w = {billing:.05,technical:.05,shipping:.05,other:.05};
+  let hits = 0;
+  Object.keys(KW).forEach(k => {
+    let h = 0;
+    KW[k].forEach(kw => { if (new RegExp('\\b'+kw).test(q)) h++; });
+    h = Math.min(h,3); hits += h; w[k] += h*0.6;
+  });
+  if (!hits) w.other += 0.6;
+  const sum = KEYS.reduce((a,k)=>a+w[k],0);
+  KEYS.forEach(k => $('sl-'+k).value = Math.round(w[k]/sum*100));
+  showPct();
+}
+
+const SCEN = [
+  {l:'Clear billing question', q:'I need help with my billing'},
+  {l:'Shipping question', q:'Where is my package? The tracking says delayed'},
+  {l:'Technical problem', q:'I cannot log in, the app shows an error'},
+  {l:'Low confidence', q:'My order payment failed'},
+  {l:'Model picks "other"', q:'Hello?'},
+  {l:'Unusable model answer', q:'I need help with my billing', nc:true}
+];
+$('chips').innerHTML = SCEN.map((s,i) => `<button class="chip" type="button" data-i="${i}">${esc(s.l)}</button>`).join('');
+
+/* the walkthrough plan, rebuilt from the inputs */
+const pct = x => Math.round(x*100) + '%';
+const fmtProbs = o => { const ks = Object.keys(o); return ks.length ? '{ ' + ks.map(k => k + ': ' + o[k].toFixed(2)).join(', ') + ' }' : '{}'; };
+const RESP = {
+  billing:'Billing agent is handling the query',
+  technical:'Technical agent is handling the query',
+  shipping:'Shipping agent is handling the query',
+  human:'Human agent is handling the query'
+};
+let plan = [], cur = 0, timer = null;
+
+function build(){
+  const p = probs();
+  const top = KEYS.reduce((a,b) => p[b] > p[a] ? b : a, KEYS[0]);
+  const conf = p[top];
+  const nc = $('nc').checked;
+  const q = $('q').value;
+  const lowConf = conf < 0.75, isOther = top === 'other';
+  const fin = nc ? 'human' : ((lowConf || isOther) ? 'human' : top);
+  const V = (active, doneN, on, doneE) => ({active, doneN, on, doneE});
+  const routerEdge = 'router-' + fin, endEdge = fin + '-END';
+  const S = [];
+
+  S.push({title:'Start with the query',
+    text:`Execution starts at <code>START</code> with <code>graph.invoke(initial_state)</code>. The state holds only <code>query</code>, which is ${esc(JSON.stringify(q))}. The other four fields stay empty until a node writes to them. The edge from <code>START</code> leads straight to <code>router</code>.`,
+    lines:[[L.init,L.invoke],[L.startEdge,L.startEdge]], patch:{query:q}, locals:null,
+    viz:V('START',[],'start-router',[])});
+
+  const lAns = nc ? [['answer.type','"message"',true]] : [['answer.type','"choice"',true],['answer.choice','"'+top+'"',true],['answer.confidence',conf.toFixed(2),true]];
+  S.push({title:'router_node calls the model',
+    text: nc
+      ? `<code>router_node</code> sends the query to the model with one multiple-choice question. In this run the model replies with something that is not a choice, such as a refusal or a plain message, so <code>answer.type</code> will not be <code>"choice"</code>.`
+      : `<code>router_node</code> sends the query to the model with one multiple-choice question. The answer carries the model's pick and a probability for every choice. The sliders above stand in for the model. Top pick: <code>${top}</code> at ${pct(conf)}.`,
+    lines:[[L.call,L.callEnd]], patch:{}, locals:lAns,
+    viz:V('router',['START'],null,['start-router'])});
+
+  if (nc){
+    S.push({title:'Check the answer type',
+      text:`<code>answer.type</code> is not <code>"choice"</code>. The node returns right here with route <code>"human"</code>, confidence <code>0.0</code> and no probabilities. The threshold check never runs. LangGraph merges those three values into the graph state.`,
+      lines:[[L.ans,L.earlyEnd]], patch:{route:'human',confidence:0,probabilities:{}}, locals:lAns.map(x=>[x[0],x[1],false]),
+      viz:V('router',['START'],null,['start-router'])});
+  } else {
+    S.push({title:'Check the answer type',
+      text:`<code>answer.type</code> is <code>"choice"</code>, so the early-exit branch is skipped and the function keeps going.`,
+      lines:[[L.ans,L.typeIf]], patch:{}, locals:lAns.map(x=>[x[0],x[1],false]),
+      viz:V('router',['START'],null,['start-router'])});
+    const lProbs = lAns.map(x=>[x[0],x[1],false]).concat([['probabilities',fmtProbs(p),true],['route','"'+top+'"',true]]);
+    S.push({title:'Collect probabilities and read the pick',
+      text:`A dict comprehension turns the list of per-choice probabilities into a plain dict. <code>route</code> is a local variable set to the model's pick, <code>"${top}"</code>. Nothing has been written to graph state yet.`,
+      lines:[[L.probs,L.routeLine]], patch:{}, locals:lProbs,
+      viz:V('router',['START'],null,['start-router'])});
+    let r4;
+    if (isOther && lowConf) r4 = `The model picked <code>"other"</code> and its confidence is ${conf.toFixed(2)}, below 0.75. Either condition is enough, so <code>route</code> becomes <code>"human"</code>.`;
+    else if (isOther) r4 = `The model picked <code>"other"</code>, so <code>route</code> is rewritten to <code>"human"</code>. Confidence (${conf.toFixed(2)}) was fine, but "other" has no node in the graph.`;
+    else if (lowConf) r4 = `Confidence is ${conf.toFixed(2)}, below 0.75, so <code>route</code> is overridden from <code>"${top}"</code> to <code>"human"</code>.`;
+    else r4 = `Confidence is ${conf.toFixed(2)}, which clears 0.75, and the pick is not "other", so <code>route</code> stays <code>"${top}"</code>.`;
+    const lGuard = lProbs.map(x => x[0]==='route' ? ['route','"'+fin+'"', fin!==top] : [x[0],x[1],false]);
+    S.push({title:'Apply the guardrail', text:r4,
+      lines:[[L.guard,L.guard+1]], patch:{}, locals:lGuard,
+      viz:V('router',['START'],null,['start-router'])});
+    S.push({title:'Return the state update',
+      text:`The returned dict is merged into the graph state, so <code>route</code>, <code>confidence</code> and <code>probabilities</code> are now saved. The local variables disappear when the function ends. <code>response</code> is still empty.`,
+      lines:[[L.ret,L.retEnd]], patch:{route:fin,confidence:conf,probabilities:p}, locals:lGuard.map(x=>[x[0],x[1],false]),
+      viz:V('router',['START'],null,['start-router'])});
+  }
+
+  S.push({title:'The conditional edge picks the next node',
+    text:`<code>choose_next_node</code> returns <code>state["route"]</code>, here <code>"${fin}"</code>. <code>add_conditional_edges</code> looks that string up in its mapping and sends execution to the <code>${fin}</code> node. The mapping has no <code>"other"</code> key, which is why the guardrail rewrites it to <code>"human"</code>.`,
+    lines:[[L.choose,L.chooseRet],[L.cond,L.condEnd]], patch:{}, locals:null,
+    viz:V(null,['START','router'],routerEdge,['start-router'])});
+
+  const d = nodeDef(fin);
+  S.push({title:`${fin}_node runs`,
+    text:`<code>${fin}_node</code> returns only <code>response</code>. LangGraph merges it into the state and leaves every other field as it was.`,
+    lines:[[d,d+3]], patch:{response:RESP[fin]}, locals:null,
+    viz:V(fin,['START','router'],null,['start-router',routerEdge])});
+
+  S.push({title:'Every worker node leads to END',
+    text:`Each of the four nodes has an edge to <code>END</code>, so the run stops and <code>graph.invoke</code> returns the final state shown on the right. Change the query or the sliders and step through again to see another path.`,
+    lines:[[L.loop,L.loop+1]], patch:{}, locals:null,
+    viz:V('END',['START','router',fin],endEdge,['start-router',routerEdge])});
+
+  return S;
+}
+
+/* draw the current step */
+function render(){
+  const s = plan[cur];
+  $('stepLabel').textContent = `Step ${cur+1} of ${plan.length}`;
+  $('back').disabled = cur === 0;
+  $('next').disabled = cur === plan.length-1;
+  $('dots').innerHTML = plan.map((_,i) => `<button class="dot ${i<cur?'done':''} ${i===cur?'cur':''}" type="button" data-i="${i}" aria-label="Go to step ${i+1}" title="Step ${i+1}"></button>`).join('');
+  $('cardEyebrow').textContent = `Step ${cur+1}`;
+  $('cardTitle').textContent = s.title;
+  $('cardText').innerHTML = s.text;
+
+  lineEls.forEach((el,i) => el.classList.toggle('on', s.lines.some(([a,b]) => i>=a && i<=b)));
+  const first = lineEls[s.lines[0][0]], pane = $('pane');
+  const calm = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  pane.scrollTo({top:Math.max(0, first.offsetTop - pane.clientHeight*0.25), behavior: calm ? 'auto' : 'smooth'});
+
+  const v = s.viz;
+  document.querySelectorAll('#flow .node').forEach(g => {
+    const id = g.dataset.n;
+    g.classList.toggle('active', id === v.active);
+    g.classList.toggle('done', v.doneN.includes(id));
+  });
+  document.querySelectorAll('#flow .edge').forEach(e => {
+    const id = e.dataset.e;
+    e.classList.toggle('on', id === v.on);
+    e.classList.toggle('done', v.doneE.includes(id));
+  });
+
+  /* bars */
+  const p = probs();
+  const top = KEYS.reduce((a,b) => p[b] > p[a] ? b : a, KEYS[0]);
+  const nc = $('nc').checked;
+  $('bars').className = (cur === 0 || nc) ? 'dim' : '';
+  $('bars').innerHTML = KEYS.map(k => `<div class="bar"><span>${k}</span><div class="track"><div class="fill ${k===top?'top':''}" style="width:${p[k]*100}%"></div><div class="thr"></div></div><span class="pc">${p[k].toFixed(2)}</span></div>`).join('')
+    + (nc ? `<p class="note">Ignored in this run: the model's answer is not a choice.</p>` : (cur === 0 ? `<p class="note">Not asked yet. The model is called in step 2.</p>` : ''));
+
+  /* graph state */
+  const committed = Object.assign({}, ...plan.slice(0,cur+1).map(x => x.patch));
+  const changed = Object.keys(s.patch);
+  const fmt = {
+    query: x => esc(JSON.stringify(x)),
+    route: x => esc(JSON.stringify(x)),
+    confidence: x => x === 0 ? '0.0' : x.toFixed(2),
+    response: x => esc(JSON.stringify(x)),
+    probabilities: x => esc(fmtProbs(x))
+  };
+  $('state').innerHTML = ['query','route','confidence','response','probabilities'].map(k => {
+    const has = k in committed;
+    return `<div class="row ${changed.includes(k)?'changed':''}"><span class="kk">${k}</span><span class="vv ${has?'':'unset'}">${has ? fmt[k](committed[k]) : 'not set yet'}</span></div>`;
+  }).join('');
+
+  /* locals */
+  $('locals').innerHTML = s.locals
+    ? s.locals.map(([k,val,ch]) => `<div class="row ${ch?'changed':''}"><span class="kk">${esc(k)}</span><span class="vv">${esc(val)}</span></div>`).join('')
+    : `<div class="row"><span class="kk"></span><span class="vv unset">${cur === 0 ? 'router_node has not started' : 'router_node has returned, its locals are gone'}</span></div>`;
+}
+
+function reset(){ stop(); plan = build(); cur = 0; render(); }
+function stop(){ clearInterval(timer); timer = null; $('play').textContent = 'Play'; }
+function play(){
+  if (timer){ stop(); return; }
+  if (cur === plan.length-1) cur = 0;
+  render();
+  $('play').textContent = 'Pause';
+  timer = setInterval(() => { if (cur >= plan.length-1){ stop(); return; } cur++; render(); }, 1800);
+}
+function go(i){ cur = Math.max(0, Math.min(plan.length-1, i)); render(); }
+
+$('next').onclick = () => { stop(); go(cur+1); };
+$('back').onclick = () => { stop(); go(cur-1); };
+$('play').onclick = play;
+$('reset').onclick = reset;
+$('dots').onclick = e => { const b = e.target.closest('.dot'); if (b){ stop(); go(+b.dataset.i); } };
+$('q').addEventListener('input', () => { autoFromQuery(); reset(); });
+$('nc').addEventListener('change', reset);
+KEYS.forEach(k => $('sl-'+k).addEventListener('input', () => { showPct(); reset(); }));
+$('chips').onclick = e => {
+  const b = e.target.closest('.chip'); if (!b) return;
+  const s = SCEN[+b.dataset.i];
+  $('q').value = s.q; $('nc').checked = !!s.nc;
+  autoFromQuery(); reset();
+};
+document.addEventListener('keydown', e => {
+  if (e.target.matches('input,textarea')) return;
+  if (e.key === 'ArrowRight'){ stop(); go(cur+1); }
+  if (e.key === 'ArrowLeft'){ stop(); go(cur-1); }
+});
+
+autoFromQuery();
+reset();
+</script>
+
+</body></html>
